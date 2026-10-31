@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace UtafitiLabs\PostGISBundle\Tests\Integration;
 
 use Doctrine\ORM\Tools\SchemaTool;
+use UtafitiLabs\PostGISBundle\Types\GeographyType;
 use UtafitiLabs\PostGISBundle\Types\GeometryType;
 use UtafitiLabs\PostGISBundle\Types\MultiPolygonType;
 
@@ -67,5 +68,32 @@ final class SchemaDiffTest extends PostGISIntegrationTestCase
         ));
 
         self::assertSame([], $touching, 'Typed column churned: '.implode(' | ', $touching));
+    }
+
+    public function testIntrospectionRecoversAGeographyColumn(): void
+    {
+        $column = $this->em->getConnection()->createSchemaManager()
+            ->introspectTable('geography_place')->getColumn('position');
+
+        self::assertInstanceOf(GeographyType::class, $column->getType());
+    }
+
+    public function testGeographyColumnDoesNotChurn(): void
+    {
+        $conn = $this->em->getConnection();
+        $sm = $conn->createSchemaManager();
+
+        $to = (new SchemaTool($this->em))
+            ->getSchemaFromMetadata($this->em->getMetadataFactory()->getAllMetadata());
+        $sql = $conn->getDatabasePlatform()->getAlterSchemaSQL(
+            $sm->createComparator()->compareSchemas($sm->introspectSchema(), $to),
+        );
+
+        $touching = array_values(array_filter(
+            $sql,
+            static fn (string $s): bool => str_contains($s, 'geography_place'),
+        ));
+
+        self::assertSame([], $touching, 'Geography column churned: '.implode(' | ', $touching));
     }
 }

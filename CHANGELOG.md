@@ -24,6 +24,11 @@ All notable changes to `utafitilabs/postgis-bundle` are documented here.
   diff no longer drops `topology.topology_id_seq`. An application's own `schema_filter`
   replaces it.
 
+### Fixed
+
+- A `geography` column no longer churns in `migrations:diff`: introspection mapped
+  `geography(Geometry,4326)` to the `geometry` type, so every diff re-declared the column.
+
 ## v0.1.0 — 2026-09-21
 
 First release of the bundle under the utafiti tools: PostGIS geometry column

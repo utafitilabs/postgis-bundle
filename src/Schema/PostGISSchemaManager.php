@@ -37,7 +37,9 @@ final class PostGISSchemaManager extends PostgreSQLSchemaManager
 
         $rawType = $tableColumn['type'] ?? null;
         $dbType = \is_string($rawType) ? strtolower($rawType) : '';
-        if ('geometry' !== $dbType && 'geography' !== $dbType) {
+        // Only geometry has typed sub-types; a geography column of any kind stays
+        // GeographyType, the type the bundle maps the geography DB type to.
+        if ('geometry' !== $dbType) {
             return $column;
         }
 
@@ -48,7 +50,7 @@ final class PostGISSchemaManager extends PostgreSQLSchemaManager
             return $column;
         }
 
-        if (1 === preg_match('/^(?:geometry|geography)\(\s*([A-Za-z]+?)(?:[ZM]{1,2})?\s*,\s*\d+\s*\)$/', $completeType, $m)) {
+        if (1 === preg_match('/^geometry\(\s*([A-Za-z]+?)(?:[ZM]{1,2})?\s*,\s*\d+\s*\)$/', $completeType, $m)) {
             $kind = strtolower($m[1]); // multipolygon, point, geometry, ...
             if (Type::hasType($kind)) {
                 $column->setType(Type::getType($kind));
