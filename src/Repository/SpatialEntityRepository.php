@@ -18,6 +18,7 @@ use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 use UtafitiLabs\PostGISBundle\Exception\MissingSpatialColumnException;
+use UtafitiLabs\PostGISBundle\Types\GeographyType;
 use UtafitiLabs\PostGISBundle\Types\GeometryType;
 
 /**
@@ -26,8 +27,9 @@ use UtafitiLabs\PostGISBundle\Types\GeometryType;
  *
  *     final class AreaRepository extends SpatialEntityRepository { … }
  *
- *     $areas->findStIntersecting($geoJson);   // GiST-backed ST_Intersects
- *     $areas->stAreaKm2(['source' => 'x']);   // geodesic km²
+ *     $areas->findStIntersecting($geoJson);        // GiST-backed ST_Intersects
+ *     $areas->findStWithinMetres($geoJson, 500);   // GiST-backed radius, nearest first
+ *     $areas->stAreaKm2(['source' => 'x']);        // geodesic km²
  *
  * Every public method carries the St marker — the bundle's signature — so it can
  * never be confused with a Doctrine core method. The geometry column is
@@ -40,6 +42,15 @@ use UtafitiLabs\PostGISBundle\Types\GeometryType;
  */
 class SpatialEntityRepository extends ServiceEntityRepository
 {
+    // Lower bounds of the metres in one degree on the WGS84 spheroid: a degree of
+    // latitude is never shorter than at the equator, a degree of longitude never
+    // shorter than 111,320 m × cos(latitude). Dividing by them over-estimates the
+    // degrees a radius spans, so the planar prefilter never drops a true match.
+    private const float METRES_PER_DEGREE_OF_LATITUDE = 110_574.0;
+    private const float METRES_PER_DEGREE_OF_LONGITUDE_AT_THE_EQUATOR = 111_320.0;
+    private const float PREFILTER_MARGIN = 1.01;
+    private const float PREFILTER_MAX_LATITUDE = 89.0;
+
     private readonly string $geometryField;
 
     /**
@@ -76,6 +87,34 @@ class SpatialEntityRepository extends ServiceEntityRepository
     }
 
     /**
+     * Entities within the given distance in metres of the GeoJSON geometry,
+     * nearest first, at most $limit of them. Measured on the spheroid
+     * (ST_DWithin and ST_Distance on geography), and found through the GiST
+     * index of the column. Ordinary criteria narrow the result further,
+     * findBy-style.
+     *
+     * @param array<string, mixed> $criteria
+     *
+     * @return list<T>
+     */
+    public function findStWithinMetres(string $geoJson, float $metres, array $criteria = [], ?int $limit = null): array
+    {
+        if (null !== $limit && $limit < 1) {
+            throw new \InvalidArgumentException(\sprintf('The limit of %s::findStWithinMetres() must be 1 or more, or null for no limit; got %d.', static::class, $limit));
+        }
+
+        $qb = $this->createStWithinMetresQueryBuilder($geoJson, $metres, $criteria);
+        if (null !== $limit) {
+            $qb->setMaxResults($limit);
+        }
+
+        /** @var list<T> $result */
+        $result = $qb->getQuery()->getResult();
+
+        return $result;
+    }
+
+    /**
      * Geodesic area of the matching rows in km² — SUM(ST_Area(Geography(geom))),
      * measured on the spheroid, not in planar CRS units.
      *
@@ -90,6 +129,70 @@ class SpatialEntityRepository extends ServiceEntityRepository
         $squareMetres = $qb->getQuery()->getSingleScalarResult();
 
         return is_numeric($squareMetres) ? (float) $squareMetres / 1e6 : 0.0;
+    }
+
+    /**
+     * The spatial field the St methods work on, discovered from the entity's
+     * metadata: the first geometry/geography field. Build your own DQL on it:
+     *
+     *     $this->createQueryBuilder('e')
+     *         ->select(sprintf('ST_Length(Geography(e.%s))', $this->getGeometryField()));
+     */
+    protected function getGeometryField(): string
+    {
+        return $this->geometryField;
+    }
+
+    /**
+     * The query behind findStWithinMetres(), for subclasses that add selects,
+     * joins or ordering. The root alias is "e"; the distance in metres is the
+     * hidden result variable "st_distance" (selected HIDDEN and ordered by), and
+     * :st_geojson is bound, so the distance per row can be added as.
+     *
+     *     ->addSelect(sprintf('ST_Distance(Geography(e.%s), ST_GeomFromGeoJSON(:st_geojson)) AS metres', $this->getGeometryField()))
+     *
+     * On a geometry column the geography cast cannot use the column's GiST
+     * index, so the query first narrows with ST_DWithin on the geometry itself,
+     * by a degree radius that is always at least as wide as $metres there, and
+     * only then measures on geography. PostGIS: "This function call includes a
+     * bounding box comparison that makes use of any indexes that are available
+     * on the geometries." — https://postgis.net/docs/ST_DWithin.html
+     * Near the poles, or when the radius crosses the antimeridian, a planar
+     * radius cannot bound the search and the prefilter is left out. A geography
+     * column needs no prefilter: its own index serves ST_DWithin.
+     *
+     * Geometry columns are assumed to hold longitude/latitude (SRID 4326), as
+     * the bundle's types declare.
+     *
+     * @param array<string, mixed> $criteria
+     */
+    protected function createStWithinMetresQueryBuilder(string $geoJson, float $metres, array $criteria = []): QueryBuilder
+    {
+        if (!is_finite($metres) || $metres < 0) {
+            throw new \InvalidArgumentException(\sprintf('The radius of %s::findStWithinMetres() is a distance in metres and must be 0 or more; got %s.', static::class, $metres));
+        }
+
+        $field = 'e.'.$this->geometryField;
+        $isGeography = GeographyType::NAME === $this->getClassMetadata()->getTypeOfField($this->geometryField);
+        $geography = $isGeography ? $field : \sprintf('Geography(%s)', $field);
+
+        // ST_Distance casts the geometry side to geography implicitly; ST_DWithin needs both.
+        // https://postgis.net/docs/ST_Distance.html
+        $qb = $this->createQueryBuilder('e')
+            ->addSelect(\sprintf('ST_Distance(%s, ST_GeomFromGeoJSON(:st_geojson)) AS HIDDEN st_distance', $geography))
+            ->where(\sprintf('ST_DWithin(%s, Geography(ST_GeomFromGeoJSON(:st_geojson)), :st_metres) = true', $geography))
+            ->setParameter('st_geojson', $geoJson)
+            ->setParameter('st_metres', $metres)
+            ->orderBy('st_distance', 'ASC');
+
+        $degrees = $isGeography ? null : self::prefilterDegrees($geoJson, $metres);
+        if (null !== $degrees) {
+            $qb->andWhere(\sprintf('ST_DWithin(%s, ST_GeomFromGeoJSON(:st_geojson), :st_degrees) = true', $field))
+                ->setParameter('st_degrees', $degrees);
+        }
+        $this->applyCriteria($qb, $criteria);
+
+        return $qb;
     }
 
     /**
@@ -129,5 +232,66 @@ class SpatialEntityRepository extends ServiceEntityRepository
         }
 
         return $fields;
+    }
+
+    /**
+     * A planar radius in degrees that contains every point within $metres of the
+     * GeoJSON geometry, or null when no planar radius can (unreadable GeoJSON,
+     * a polar search, or one across the antimeridian).
+     */
+    private static function prefilterDegrees(string $geoJson, float $metres): ?float
+    {
+        $geometry = json_decode($geoJson, true);
+        $positions = [];
+        self::collectPositions($geometry, $positions);
+        if ([] === $positions) {
+            return null;
+        }
+
+        $longitudes = array_column($positions, 0);
+        $latitudes = array_column($positions, 1);
+
+        $latitudeDegrees = $metres / self::METRES_PER_DEGREE_OF_LATITUDE * self::PREFILTER_MARGIN;
+        $furthestLatitude = max(array_map(abs(...), $latitudes)) + $latitudeDegrees;
+        if ($furthestLatitude >= self::PREFILTER_MAX_LATITUDE) {
+            return null;
+        }
+
+        $longitudeDegrees = $metres / (self::METRES_PER_DEGREE_OF_LONGITUDE_AT_THE_EQUATOR * cos(deg2rad($furthestLatitude))) * self::PREFILTER_MARGIN;
+        if (min($longitudes) - $longitudeDegrees < -180.0 || max($longitudes) + $longitudeDegrees > 180.0) {
+            return null;
+        }
+
+        return hypot($longitudeDegrees, $latitudeDegrees);
+    }
+
+    /**
+     * Every [longitude, latitude] position of a decoded GeoJSON geometry,
+     * geometry collections included.
+     *
+     * @param list<array{0: float, 1: float}> $positions
+     */
+    private static function collectPositions(mixed $node, array &$positions): void
+    {
+        if (!\is_array($node)) {
+            return;
+        }
+        if (isset($node[0], $node[1]) && is_numeric($node[0]) && is_numeric($node[1])) {
+            $positions[] = [(float) $node[0], (float) $node[1]];
+
+            return;
+        }
+        foreach (['coordinates', 'geometries'] as $key) {
+            if (isset($node[$key])) {
+                self::collectPositions($node[$key], $positions);
+
+                return;
+            }
+        }
+        if (array_is_list($node)) {
+            foreach ($node as $child) {
+                self::collectPositions($child, $positions);
+            }
+        }
     }
 }

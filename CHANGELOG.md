@@ -14,6 +14,11 @@ All notable changes to `utafitilabs/postgis-bundle` are documented here.
 - DQL functions `ST_Distance` and `ST_Length` (metres on geography), `ST_Buffer`,
   `ST_Intersection`, and `ST_KnnDistance(a, b)`, the `<->` operator for index-ordered
   nearest-neighbour lists.
+- `SpatialEntityRepository::findStWithinMetres($geoJson, $metres, $criteria, $limit)`: the
+  entities within a radius in metres, nearest first, measured on the spheroid and found
+  through the column's GiST index.
+- `SpatialEntityRepository::getGeometryField()` and `createStWithinMetresQueryBuilder()` for
+  subclasses that write their own spatial queries.
 
 ## v0.1.0 — 2026-09-21
 

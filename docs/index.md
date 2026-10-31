@@ -12,6 +12,9 @@ typed geometry columns with churn-free migrations.
 - [DQL functions](#dql-functions)
   - [Distances in metres](#distances-in-metres)
   - [Nearest neighbours](#nearest-neighbours)
+- [Spatial repository](#spatial-repository)
+  - [Radius search](#radius-search)
+  - [Your own spatial queries](#your-own-spatial-queries)
 - [Automatic GiST indexes](#automatic-gist-indexes)
 - [Further reading](#further-reading)
 
@@ -125,7 +128,8 @@ $em->createQuery(
 
 Wrapping a `geometry` column in `Geography()` hides it from the column's GiST index, so
 this form measures every row. To filter by a radius on a large table, prefilter on the
-column itself and keep the geography cast for the exact distance.
+column itself and keep the geography cast for the exact distance — or let
+[`findStWithinMetres()`](#radius-search) do both.
 
 ### Nearest neighbours
 
@@ -141,6 +145,75 @@ $em->createQuery(
 
 On a geometry column the value is planar (degrees for SRID 4326), so the order is
 planar too: use it to rank, and `ST_Distance` on geography when the number has to be metres.
+
+## Spatial repository
+
+Extend `SpatialEntityRepository` instead of `ServiceEntityRepository` and the `St` methods
+are there, with no DQL to write:
+
+```php
+// src/Repository/VenueRepository.php
+use Doctrine\Persistence\ManagerRegistry;
+use UtafitiLabs\PostGISBundle\Repository\SpatialEntityRepository;
+
+/** @extends SpatialEntityRepository<Venue> */
+final class VenueRepository extends SpatialEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, Venue::class);
+    }
+}
+```
+
+| Method | Returns |
+|---|---|
+| `findStIntersecting(string $geoJson, array $criteria = [])` | `list<T>` whose shape intersects the GeoJSON geometry |
+| `findStWithinMetres(string $geoJson, float $metres, array $criteria = [], ?int $limit = null)` | `list<T>` within `$metres`, nearest first, at most `$limit` |
+| `stAreaKm2(array $criteria = [])` | `float`, the geodesic area of the matching rows in km² |
+
+The spatial column is the entity's first `geometry`/`geography` field, read from its
+Doctrine metadata; an entity without one is rejected when the repository is built.
+`$criteria` narrows any method the way `findBy()` does (`['category' => 'museum']`), and an
+unknown field is refused with the list of the entity's fields.
+
+### Radius search
+
+```php
+$venues->findStWithinMetres('{"type":"Point","coordinates":[13.4,52.5]}', 1500.0, ['open' => true], 20);
+```
+
+The distance is measured on the spheroid (`ST_DWithin` and `ST_Distance` on geography), in
+metres, and the result is ordered nearest first. On a `geometry` column the geography cast
+cannot use the column's GiST index, so the query first narrows with `ST_DWithin` on the
+geometry itself, using a radius in degrees that is always at least as wide as the metre radius at
+that latitude, and only then measures on geography. Near the poles (beyond 89°) and when the
+radius crosses the antimeridian no degree radius can bound the search, so that prefilter is
+left out and every row is measured. A `geography` column needs no prefilter: its own index
+serves `ST_DWithin`. Geometry columns are taken to hold longitude/latitude (SRID 4326), as
+the bundle's types declare.
+
+A negative radius and a limit below 1 are refused with an `InvalidArgumentException`.
+
+### Your own spatial queries
+
+Subclasses reach the discovered field with `getGeometryField()`, and the query behind the
+radius search with `createStWithinMetresQueryBuilder($geoJson, $metres, $criteria)`: root
+alias `e`, the GeoJSON bound as `:st_geojson`, the distance selected as the hidden result
+variable `st_distance` and ordered by. To return the distance with each entity, add it as a
+visible select:
+
+```php
+// src/Repository/VenueRepository.php
+/** @return list<array{0: Venue, metres: float}> */
+public function findNearbyWithDistance(string $geoJson, float $metres): array
+{
+    return $this->createStWithinMetresQueryBuilder($geoJson, $metres)
+        ->addSelect(sprintf('ST_Distance(Geography(e.%s), ST_GeomFromGeoJSON(:st_geojson)) AS metres', $this->getGeometryField()))
+        ->getQuery()
+        ->getResult();
+}
+```
 
 ## Automatic GiST indexes
 

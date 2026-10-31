@@ -20,7 +20,13 @@ namespace UtafitiLabs\PostGISBundle\ORM\Functions;
  *
  *   WHERE ST_DWithin(Geography(e.geom), Geography(ST_GeomFromGeoJSON(:p)), :meters) = true
  *
- * Rides the GiST index the bundle auto-creates on every spatial column.
+ * The GiST index the bundle creates on every spatial column serves ST_DWithin
+ * on the column as declared. Geography(...) around a geometry column hides
+ * it from that index, so on a large table pair the geodesic test with a planar
+ * one on the column itself, as SpatialEntityRepository::findStWithinMetres() does.
+ * PostGIS: "This function call includes a bounding box comparison that makes use
+ * of any indexes that are available on the geometries." —
+ * https://postgis.net/docs/ST_DWithin.html
  */
 final class StDWithin extends AbstractSpatialFunction
 {

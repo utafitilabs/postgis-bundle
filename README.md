@@ -86,13 +86,14 @@ use UtafitiLabs\PostGISBundle\Repository\SpatialEntityRepository;
 final class AreaRepository extends SpatialEntityRepository {}   // that's all
 
 $areas->findStIntersecting($geoJson);        // GiST-backed ST_Intersects
+$areas->findStWithinMetres($geoJson, 500);   // within 500 m, nearest first, GiST-backed
 $areas->stAreaKm2(['source' => 'wdpa']);     // geodesic km², findBy-style criteria
 ```
 
 Every method carries the `St` marker — the bundle's signature, never confusable
 with a Doctrine core method. The geometry column is discovered from the entity's
-own metadata; an entity without one is rejected at construction with a teaching
-message.
+own metadata (subclasses read it with `getGeometryField()`); an entity without one
+is rejected at construction with a teaching message.
 Every geometry/geography column gets a `USING gist` index in generated migrations, automatically.
 
 ## Documentation
