@@ -70,11 +70,13 @@ $em->createQuery(
 ```
 
 Column types: `geometry`, `geography`, `point`, `linestring`, `polygon`, `multipolygon`.
-DQL functions: `ST_AsGeoJSON`, `ST_GeomFromGeoJSON`, `ST_Intersects`, `ST_DWithin`, `ST_Union`,
-`ST_SimplifyPreserveTopology`, `ST_MakeValid`, `ST_CollectionExtract`, `ST_Multi`,
-`ST_Area`, and `Geography(g)` (the `::geography` cast, for geodesic measurement:
-`ST_Area(Geography(t.geom))` = m²) — enough to express dissolve-style aggregation
-entirely in DQL.
+DQL functions: `ST_AsGeoJSON`, `ST_GeomFromGeoJSON`, `ST_Intersects`, `ST_DWithin`,
+`ST_Distance`, `ST_Length`, `ST_Area`, `ST_Buffer`, `ST_Intersection`, `ST_Union` (aggregate
+and pairwise), `ST_SimplifyPreserveTopology`, `ST_MakeValid`, `ST_CollectionExtract`,
+`ST_Multi`, `ST_KnnDistance(a, b)` (the `<->` operator, for index-ordered nearest-neighbour
+lists) and `Geography(g)` (the `::geography` cast, for geodesic measurement:
+`ST_Area(Geography(t.geom))` = m², `ST_Distance(Geography(t.geom), ST_GeomFromGeoJSON(:p))`
+= metres) — enough to express dissolve-style aggregation and distance ranking entirely in DQL.
 
 Prefer no DQL at all? Extend the repository base and the St methods just exist:
 

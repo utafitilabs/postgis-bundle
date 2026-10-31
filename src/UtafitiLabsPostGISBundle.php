@@ -20,10 +20,15 @@ use UtafitiLabs\PostGISBundle\EventListener\SpatialSchemaListener;
 use UtafitiLabs\PostGISBundle\ORM\Functions\Geography;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StArea;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StAsGeoJson;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StBuffer;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StCollectionExtract;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StDistance;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StDWithin;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StGeomFromGeoJson;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StIntersection;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StIntersects;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StKnnDistance;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StLength;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StMakeValid;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StMulti;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StSimplifyPreserveTopology;
@@ -76,8 +81,10 @@ final class UtafitiLabsPostGISBundle extends AbstractBundle
                     'string_functions' => [
                         'Geography' => Geography::class,
                         'ST_AsGeoJSON' => StAsGeoJson::class,
+                        'ST_Buffer' => StBuffer::class,
                         'ST_CollectionExtract' => StCollectionExtract::class,
                         'ST_GeomFromGeoJSON' => StGeomFromGeoJson::class,
+                        'ST_Intersection' => StIntersection::class,
                         'ST_MakeValid' => StMakeValid::class,
                         'ST_Multi' => StMulti::class,
                         'ST_SimplifyPreserveTopology' => StSimplifyPreserveTopology::class,
@@ -85,8 +92,11 @@ final class UtafitiLabsPostGISBundle extends AbstractBundle
                     ],
                     'numeric_functions' => [
                         'ST_Area' => StArea::class,
+                        'ST_Distance' => StDistance::class,
                         'ST_DWithin' => StDWithin::class,
                         'ST_Intersects' => StIntersects::class,
+                        'ST_KnnDistance' => StKnnDistance::class,
+                        'ST_Length' => StLength::class,
                     ],
                 ],
             ],

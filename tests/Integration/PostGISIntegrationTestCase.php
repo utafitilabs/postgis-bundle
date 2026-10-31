@@ -28,10 +28,15 @@ use UtafitiLabs\PostGISBundle\EventListener\SpatialSchemaListener;
 use UtafitiLabs\PostGISBundle\ORM\Functions\Geography;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StArea;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StAsGeoJson;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StBuffer;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StCollectionExtract;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StDistance;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StDWithin;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StGeomFromGeoJson;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StIntersection;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StIntersects;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StKnnDistance;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StLength;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StMakeValid;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StMulti;
 use UtafitiLabs\PostGISBundle\ORM\Functions\StSimplifyPreserveTopology;
@@ -81,15 +86,20 @@ abstract class PostGISIntegrationTestCase extends TestCase
         $ormConfig->enableNativeLazyObjects(true); // PHP 8.4+ native lazy objects (no proxy-gen dep)
         $ormConfig->addCustomStringFunction('Geography', Geography::class);
         $ormConfig->addCustomStringFunction('ST_AsGeoJSON', StAsGeoJson::class);
+        $ormConfig->addCustomStringFunction('ST_Buffer', StBuffer::class);
         $ormConfig->addCustomStringFunction('ST_CollectionExtract', StCollectionExtract::class);
+        $ormConfig->addCustomNumericFunction('ST_Distance', StDistance::class);
         $ormConfig->addCustomNumericFunction('ST_DWithin', StDWithin::class);
         $ormConfig->addCustomStringFunction('ST_GeomFromGeoJSON', StGeomFromGeoJson::class);
+        $ormConfig->addCustomStringFunction('ST_Intersection', StIntersection::class);
         $ormConfig->addCustomStringFunction('ST_MakeValid', StMakeValid::class);
         $ormConfig->addCustomStringFunction('ST_Multi', StMulti::class);
         $ormConfig->addCustomStringFunction('ST_SimplifyPreserveTopology', StSimplifyPreserveTopology::class);
         $ormConfig->addCustomStringFunction('ST_Union', StUnion::class);
         $ormConfig->addCustomNumericFunction('ST_Area', StArea::class);
         $ormConfig->addCustomNumericFunction('ST_Intersects', StIntersects::class);
+        $ormConfig->addCustomNumericFunction('ST_KnnDistance', StKnnDistance::class);
+        $ormConfig->addCustomNumericFunction('ST_Length', StLength::class);
 
         $dbalConfig = new DbalConfiguration();
         $dbalConfig->setMiddlewares([new PostGISMiddleware()]);

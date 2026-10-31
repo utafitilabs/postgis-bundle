@@ -4,6 +4,17 @@ First-class **PostGIS** support for **Doctrine ORM 3 / DBAL 4** on **Symfony**: 
 column types exchanged as GeoJSON, `ST_*` DQL functions, automatic GiST indexing, and
 typed geometry columns with churn-free migrations.
 
+## Contents
+
+- [Installation](#installation)
+- [Requirements](#requirements)
+- [Column types](#column-types)
+- [DQL functions](#dql-functions)
+  - [Distances in metres](#distances-in-metres)
+  - [Nearest neighbours](#nearest-neighbours)
+- [Automatic GiST indexes](#automatic-gist-indexes)
+- [Further reading](#further-reading)
+
 ## Installation
 
 Applications that use [Symfony Flex](https://symfony.com/doc/current/setup.html#creating-symfony-applications):
@@ -78,6 +89,58 @@ $em->createQuery(
      WHERE ST_Intersects(a.boundary, ST_GeomFromGeoJSON(:poly)) = true'
 )->setParameter('poly', $geoJsonPolygon)->getSingleScalarResult();
 ```
+
+| DQL function | Returns | Notes |
+|---|---|---|
+| `ST_AsGeoJSON(g[, digits[, options]])` | text | GeoJSON of a shape |
+| `ST_GeomFromGeoJSON(text)` | geometry | SRID 4326 |
+| `ST_Intersects(a, b)` | boolean | compare with `= true`; GiST-backed |
+| `ST_DWithin(a, b, distance[, use_spheroid])` | boolean | metres when both sides are geography |
+| `ST_Distance(a, b[, use_spheroid])` | float | metres when either side is geography, CRS units on geometry |
+| `ST_Length(g[, use_spheroid])` | float | metres on geography, CRS units on geometry |
+| `ST_Area(g)` | float | m² on geography, CRS units² on geometry |
+| `ST_Buffer(g, radius[, style])` | geometry / geography | radius in metres on geography |
+| `ST_Intersection(a, b[, gridSize])` | geometry | the part both shapes share |
+| `ST_Union(g)` / `ST_Union(a, b)` | geometry | aggregate (dissolve) or pairwise |
+| `ST_SimplifyPreserveTopology(g, tolerance)` | geometry | never produces invalid shapes |
+| `ST_MakeValid(g)` | geometry | repairs without losing vertices |
+| `ST_CollectionExtract(g, type)` | geometry | 1 points, 2 lines, 3 polygons |
+| `ST_Multi(g)` | geometry | Polygon → MultiPolygon |
+| `ST_KnnDistance(a, b)` | float | the `<->` operator; an ordering key, not metres |
+| `Geography(g)` | geography | the `::geography` cast |
+
+### Distances in metres
+
+`ST_Distance` on geography returns metres, so it can be selected and ordered by.
+PostgreSQL casts the geometry side to geography itself, so one `Geography()` is enough:
+
+```php
+// [0 => Venue, 'metres' => float] per row, nearest first
+$em->createQuery(
+    'SELECT v, ST_Distance(Geography(v.location), ST_GeomFromGeoJSON(:p)) AS metres
+     FROM App\Entity\Venue v
+     ORDER BY metres ASC'
+)->setParameter('p', $geoJsonPoint)->setMaxResults(20)->getResult();
+```
+
+Wrapping a `geometry` column in `Geography()` hides it from the column's GiST index, so
+this form measures every row. To filter by a radius on a large table, prefilter on the
+column itself and keep the geography cast for the exact distance.
+
+### Nearest neighbours
+
+`ST_KnnDistance(a, b)` is PostGIS's `<->` operator. In `ORDER BY` with a limit, PostgreSQL
+walks the GiST index in distance order instead of sorting every row:
+
+```php
+$em->createQuery(
+    'SELECT v FROM App\Entity\Venue v
+     ORDER BY ST_KnnDistance(v.location, ST_GeomFromGeoJSON(:p)) ASC'
+)->setParameter('p', $geoJsonPoint)->setMaxResults(10)->getResult();
+```
+
+On a geometry column the value is planar (degrees for SRID 4326), so the order is
+planar too: use it to rank, and `ST_Distance` on geography when the number has to be metres.
 
 ## Automatic GiST indexes
 

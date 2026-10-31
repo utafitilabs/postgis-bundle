@@ -104,4 +104,108 @@ final class SpatialIntegrationTest extends PostGISIntegrationTestCase
         self::assertEquals(1, $countWithin(150.0));
         self::assertEquals(0, $countWithin(50.0));
     }
+
+    public function testStDistanceOnGeographyReturnsMetresAndOrdersRows(): void
+    {
+        foreach (['far' => '[0.01,0]', 'origin' => '[0,0]', 'near' => '[0.001,0]'] as $label => $coordinates) {
+            $thing = new SpatialThing();
+            $thing->geom = '{"type":"Point","coordinates":'.$coordinates.'}';
+            $thing->label = $label;
+            $this->em->persist($thing);
+        }
+        $this->em->flush();
+
+        /** @var list<array{label: string, metres: float|string}> $rows */
+        $rows = $this->em->createQuery(\sprintf(
+            'SELECT t.label AS label, ST_Distance(Geography(t.geom), ST_GeomFromGeoJSON(:p)) AS metres'
+            .' FROM %s t ORDER BY metres ASC',
+            SpatialThing::class,
+        ))->setParameter('p', '{"type":"Point","coordinates":[0,0]}')->getArrayResult();
+
+        self::assertSame(['origin', 'near', 'far'], array_column($rows, 'label'));
+        self::assertEqualsWithDelta(0.0, (float) $rows[0]['metres'], 1e-6);
+        self::assertEqualsWithDelta(111.32, (float) $rows[1]['metres'], 0.5, '0.001° of longitude on the equator');
+        self::assertEqualsWithDelta(1113.2, (float) $rows[2]['metres'], 5.0);
+    }
+
+    public function testStDistanceOnGeometryIsPlanarDegrees(): void
+    {
+        $thing = new SpatialThing();
+        $thing->geom = '{"type":"Point","coordinates":[0,0]}';
+        $this->em->persist($thing);
+        $this->em->flush();
+
+        $distance = $this->em->createQuery(\sprintf(
+            'SELECT ST_Distance(t.geom, ST_GeomFromGeoJSON(:p)) FROM %s t',
+            SpatialThing::class,
+        ))->setParameter('p', '{"type":"Point","coordinates":[3,4]}')->getSingleScalarResult();
+
+        self::assertEqualsWithDelta(5.0, (float) $distance, 1e-9);
+    }
+
+    public function testStLengthOnGeographyReturnsMetres(): void
+    {
+        $line = new SpatialThing();
+        $line->geom = '{"type":"LineString","coordinates":[[0,0],[0.01,0]]}';
+        $this->em->persist($line);
+        $this->em->flush();
+
+        $query = fn (string $dql): mixed => $this->em->createQuery(\sprintf($dql, SpatialThing::class))
+            ->getSingleScalarResult();
+
+        self::assertEqualsWithDelta(1113.2, (float) $query('SELECT ST_Length(Geography(t.geom)) FROM %s t'), 5.0);
+        self::assertEqualsWithDelta(0.01, (float) $query('SELECT ST_Length(t.geom) FROM %s t'), 1e-9, 'planar degrees');
+    }
+
+    public function testStKnnDistanceOrdersByTheIndexDistanceOperator(): void
+    {
+        foreach (['far' => '[2,0]', 'near' => '[1,0]', 'nearest' => '[0.5,0]'] as $label => $coordinates) {
+            $thing = new SpatialThing();
+            $thing->geom = '{"type":"Point","coordinates":'.$coordinates.'}';
+            $thing->label = $label;
+            $this->em->persist($thing);
+        }
+        $this->em->flush();
+
+        $query = $this->em->createQuery(\sprintf(
+            'SELECT t.label FROM %s t ORDER BY ST_KnnDistance(t.geom, ST_GeomFromGeoJSON(:p)) ASC',
+            SpatialThing::class,
+        ))->setParameter('p', '{"type":"Point","coordinates":[0,0]}')->setMaxResults(2);
+
+        $sql = $query->getSQL();
+        self::assertIsString($sql);
+        self::assertStringContainsString(' <-> ', $sql);
+        self::assertSame(['nearest', 'near'], array_column($query->getArrayResult(), 'label'));
+    }
+
+    public function testStBufferOnGeographyBuffersByMetres(): void
+    {
+        $thing = new SpatialThing();
+        $thing->geom = '{"type":"Point","coordinates":[0,0]}';
+        $this->em->persist($thing);
+        $this->em->flush();
+
+        $area = $this->em->createQuery(\sprintf(
+            'SELECT ST_Area(ST_Buffer(Geography(t.geom), :metres)) FROM %s t',
+            SpatialThing::class,
+        ))->setParameter('metres', 100.0)->getSingleScalarResult();
+
+        self::assertEqualsWithDelta(\M_PI * 100 ** 2, (float) $area, 0.01 * \M_PI * 100 ** 2, 'a 100 m disc');
+    }
+
+    public function testStIntersectionReturnsTheSharedPart(): void
+    {
+        $thing = new SpatialThing();
+        $thing->geom = '{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}';
+        $this->em->persist($thing);
+        $this->em->flush();
+
+        $area = $this->em->createQuery(\sprintf(
+            'SELECT ST_Area(ST_Intersection(t.geom, ST_GeomFromGeoJSON(:other))) FROM %s t',
+            SpatialThing::class,
+        ))->setParameter('other', '{"type":"Polygon","coordinates":[[[1,1],[3,1],[3,3],[1,3],[1,1]]]}')
+            ->getSingleScalarResult();
+
+        self::assertEqualsWithDelta(1.0, (float) $area, 1e-9, 'the overlapping 1x1 square');
+    }
 }

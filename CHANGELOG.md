@@ -4,7 +4,16 @@ All notable changes to `utafitilabs/postgis-bundle` are documented here.
 
 ## Contents
 
+- [Unreleased](#unreleased)
 - [v0.1.0](#v010--2026-09-21)
+
+## Unreleased
+
+### Added
+
+- DQL functions `ST_Distance` and `ST_Length` (metres on geography), `ST_Buffer`,
+  `ST_Intersection`, and `ST_KnnDistance(a, b)`, the `<->` operator for index-ordered
+  nearest-neighbour lists.
 
 ## v0.1.0 — 2026-09-21
 

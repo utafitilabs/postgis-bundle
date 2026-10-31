@@ -15,7 +15,14 @@ namespace UtafitiLabs\PostGISBundle\Tests\Functional;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Types\Type;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StBuffer;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StDistance;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StDWithin;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StIntersection;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StKnnDistance;
+use UtafitiLabs\PostGISBundle\ORM\Functions\StLength;
 use UtafitiLabs\PostGISBundle\Platform\PostGISPlatform;
 use UtafitiLabs\PostGISBundle\Schema\PostGISSchemaManager;
 
@@ -69,6 +76,22 @@ final class BundleWiringTest extends KernelTestCase
         self::bootKernel(['debug' => false]);
 
         self::assertInstanceOf(PostGISSchemaManager::class, self::connection()->createSchemaManager());
+    }
+
+    public function testBundleRegistersTheMeasurementAndOverlayDqlFunctions(): void
+    {
+        self::bootKernel(['debug' => false]);
+
+        $entityManager = self::getContainer()->get('doctrine.orm.default_entity_manager');
+        \assert($entityManager instanceof EntityManagerInterface);
+        $configuration = $entityManager->getConfiguration();
+
+        self::assertSame(StDWithin::class, $configuration->getCustomNumericFunction('ST_DWithin'));
+        self::assertSame(StDistance::class, $configuration->getCustomNumericFunction('ST_Distance'));
+        self::assertSame(StLength::class, $configuration->getCustomNumericFunction('ST_Length'));
+        self::assertSame(StKnnDistance::class, $configuration->getCustomNumericFunction('ST_KnnDistance'));
+        self::assertSame(StBuffer::class, $configuration->getCustomStringFunction('ST_Buffer'));
+        self::assertSame(StIntersection::class, $configuration->getCustomStringFunction('ST_Intersection'));
     }
 
     private static function connection(): Connection
