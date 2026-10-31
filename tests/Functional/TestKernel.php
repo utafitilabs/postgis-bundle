@@ -25,6 +25,10 @@ final class TestKernel extends Kernel
 {
     use MicroKernelTrait;
 
+    public const string APP_SCHEMA_FILTER_ENVIRONMENT = 'app_schema_filter';
+    public const string APP_SCHEMA_FILTER = '~^(?!legacy_)~';
+    public const string NO_SCHEMA_FILTER_ENVIRONMENT = 'no_schema_filter';
+
     public function registerBundles(): iterable
     {
         return [
@@ -76,6 +80,12 @@ final class TestKernel extends Kernel
                 ],
             ],
         ]);
+        if (self::APP_SCHEMA_FILTER_ENVIRONMENT === $this->environment) {
+            $container->extension('doctrine', ['dbal' => ['schema_filter' => self::APP_SCHEMA_FILTER]]);
+        }
+        if (self::NO_SCHEMA_FILTER_ENVIRONMENT === $this->environment) {
+            $container->extension('doctrine', ['dbal' => ['schema_filter' => null]]);
+        }
     }
 
     protected function configureRoutes(RoutingConfigurator $routes): void

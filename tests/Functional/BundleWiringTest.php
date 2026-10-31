@@ -94,6 +94,32 @@ final class BundleWiringTest extends KernelTestCase
         self::assertSame(StIntersection::class, $configuration->getCustomStringFunction('ST_Intersection'));
     }
 
+    public function testBundlePrependsASchemaFilterForPostGISOwnAssets(): void
+    {
+        self::bootKernel(['debug' => false]);
+        $filter = self::connection()->getConfiguration()->getSchemaAssetsFilter();
+
+        self::assertFalse($filter('topology.topology_id_seq'));
+        self::assertFalse($filter('spatial_ref_sys'));
+        self::assertTrue($filter('spatial_thing'));
+    }
+
+    public function testAnApplicationSchemaFilterReplacesTheBundleOne(): void
+    {
+        self::bootKernel(['debug' => false, 'environment' => TestKernel::APP_SCHEMA_FILTER_ENVIRONMENT]);
+        $filter = self::connection()->getConfiguration()->getSchemaAssetsFilter();
+
+        self::assertFalse($filter('legacy_orders'));
+        self::assertTrue($filter('topology.topology_id_seq'), 'the application filter applies alone');
+    }
+
+    public function testAnApplicationTurnsFilteringOffWithANullSchemaFilter(): void
+    {
+        self::bootKernel(['debug' => false, 'environment' => TestKernel::NO_SCHEMA_FILTER_ENVIRONMENT]);
+
+        self::assertTrue(self::connection()->getConfiguration()->getSchemaAssetsFilter()('topology.topology_id_seq'));
+    }
+
     private static function connection(): Connection
     {
         $connection = self::getContainer()->get('doctrine.dbal.default_connection');

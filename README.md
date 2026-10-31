@@ -38,12 +38,17 @@ return [
 ```
 
 That one line registers the spatial types, the DB-type mappings, the `ST_*` DQL functions,
-the `USING gist` platform middleware, the typmod-aware schema manager, and the auto-GiST
-schema listener. Nothing else to configure.
+the `USING gist` platform middleware, the typmod-aware schema manager, the auto-GiST
+schema listener, and a `schema_filter` that keeps PostGIS's own tables and sequences
+(`spatial_ref_sys`, the `topology` schema) out of `migrations:diff`. Nothing else to configure.
 
 The bundle's configuration root key is `utafiti_labs_post_gis`. It takes no options — it
 is simply the key reserved in `config/packages/`, and the prefix of the bundle's internal
 service ids.
+
+An application that sets its own `doctrine.dbal.schema_filter` replaces the bundle's; keep
+PostGIS's assets out in that expression too
+([how](docs/index.md#postgis-tables-and-migrations)).
 
 ## A taste
 

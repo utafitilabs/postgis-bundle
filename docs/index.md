@@ -16,6 +16,7 @@ typed geometry columns with churn-free migrations.
   - [Radius search](#radius-search)
   - [Your own spatial queries](#your-own-spatial-queries)
 - [Automatic GiST indexes](#automatic-gist-indexes)
+- [PostGIS tables and migrations](#postgis-tables-and-migrations)
 - [Further reading](#further-reading)
 
 ## Installation
@@ -38,7 +39,8 @@ return [
 
 There is nothing to configure: enabling the bundle registers the spatial Doctrine types,
 the database-type mappings, the `ST_*` DQL functions, the `USING gist` platform
-middleware, the typmod-aware schema manager, and the auto-GiST schema listener.
+middleware, the typmod-aware schema manager, the auto-GiST schema listener, and a
+[schema filter for PostGIS's own tables](#postgis-tables-and-migrations).
 
 The bundle's configuration root key is `utafiti_labs_post_gis` (the DI extension alias).
 It accepts no options; it is the key reserved in `config/packages/` and the prefix of the
@@ -219,6 +221,47 @@ public function findNearbyWithDistance(string $geoJson, float $metres): array
 
 Every geometry/geography column gets a `USING gist` index in the generated schema and in
 migrations — no hand-written DDL.
+
+## PostGIS tables and migrations
+
+`CREATE EXTENSION postgis` creates `spatial_ref_sys`, and `CREATE EXTENSION
+postgis_topology` creates the `topology` schema with its tables and the
+`topology.topology_id_seq` sequence. None of them are your entities, so
+`doctrine:migrations:diff` would plan to drop them. DBAL already skips `spatial_ref_sys` and
+the extension's tables on PostgreSQL, but not the topology sequence:
+
+```sql
+DROP SEQUENCE topology.topology_id_seq CASCADE
+```
+
+The bundle therefore prepends a `schema_filter` to the DBAL configuration,
+`UtafitiLabsPostGISBundle::POSTGIS_SCHEMA_FILTER`:
+
+```yaml
+# what the bundle prepends — nothing to write
+doctrine:
+    dbal:
+        schema_filter: '~^(?!(?:[^.]+\.)?spatial_ref_sys$|topology\.)~'
+```
+
+It keeps every asset except `spatial_ref_sys` (in any schema) and everything in the
+`topology` schema. Your own tables named `layer` or `topology` in your schema are kept.
+
+The filter is prepended, so an application that sets its own `schema_filter` replaces it.
+Fold the PostGIS part into your expression when you do:
+
+```yaml
+# config/packages/doctrine.yaml
+doctrine:
+    dbal:
+        # your own rule (skip tables prefixed legacy_) plus PostGIS's assets
+        schema_filter: '~^(?!legacy_|(?:[^.]+\.)?spatial_ref_sys$|topology\.)~'
+```
+
+Set `schema_filter: ~` to turn filtering off altogether. DoctrineBundle reads
+`schema_filter` per connection, and the bundle prepends it at the top level of
+`doctrine.dbal`, which is the `default` connection's; with several connections under
+`connections`, set it on each other connection that holds PostGIS.
 
 ## Further reading
 

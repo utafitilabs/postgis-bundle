@@ -19,6 +19,10 @@ All notable changes to `utafitilabs/postgis-bundle` are documented here.
   through the column's GiST index.
 - `SpatialEntityRepository::getGeometryField()` and `createStWithinMetresQueryBuilder()` for
   subclasses that write their own spatial queries.
+- A prepended `doctrine.dbal.schema_filter` (`UtafitiLabsPostGISBundle::POSTGIS_SCHEMA_FILTER`)
+  that keeps `spatial_ref_sys` and the `topology` schema out of `migrations:diff`, so the
+  diff no longer drops `topology.topology_id_seq`. An application's own `schema_filter`
+  replaces it.
 
 ## v0.1.0 — 2026-09-21
 

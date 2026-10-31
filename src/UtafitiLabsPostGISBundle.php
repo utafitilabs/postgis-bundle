@@ -52,6 +52,27 @@ final class UtafitiLabsPostGISBundle extends AbstractBundle
 {
     protected string $extensionAlias = 'utafiti_labs_post_gis';
 
+    /**
+     * The doctrine.dbal.schema_filter the bundle prepends: keeps every asset
+     * except those PostGIS creates itself, so doctrine:migrations:diff never
+     * drops them. DBAL already skips spatial_ref_sys and extension-owned tables
+     * on PostgreSQL, but not the sequence of postgis_topology
+     * (topology.topology_id_seq), which a diff would DROP … CASCADE; the
+     * expression covers spatial_ref_sys in any schema too, and everything in the
+     * topology schema.
+     *
+     * DoctrineBundle registers the expression as a RegexSchemaAssetFilter that
+     * keeps an asset when preg_match() matches it (vendor/doctrine/doctrine-bundle/
+     * src/DependencyInjection/DoctrineExtension.php, src/Dbal/RegexSchemaAssetFilter.php),
+     * so it is written as a negative lookahead. The DoctrineMigrationsBundle docs:
+     * "By default such tables will be marked for removal by the
+     * doctrine:migrations:diff command." and "This ignores the tables, and any
+     * named objects such as sequences, on the DBAL level and they will be ignored
+     * by the diff command." —
+     * https://symfony.com/bundles/DoctrineMigrationsBundle/current/index.html#manual-tables-not-managed-by-doctrine
+     */
+    public const string POSTGIS_SCHEMA_FILTER = '~^(?!(?:[^.]+\.)?spatial_ref_sys$|topology\.)~';
+
     // Leading dot: internal services, hidden from `debug:container` (Symfony
     // bundle best practice for services not meant to be used by the app).
     private const SCHEMA_MANAGER_FACTORY_ID = '.utafiti_labs_post_gis.schema_manager_factory';
@@ -75,6 +96,12 @@ final class UtafitiLabsPostGISBundle extends AbstractBundle
                     'geography' => GeographyType::NAME,
                 ],
                 'schema_manager_factory' => self::SCHEMA_MANAGER_FACTORY_ID,
+                // Prepended, so an application's own schema_filter replaces it:
+                // "As this method only prepends settings, any other settings done
+                // explicitly inside the config/* files would override these
+                // prepended settings." —
+                // https://symfony.com/doc/current/bundles/prepend_extension.html
+                'schema_filter' => self::POSTGIS_SCHEMA_FILTER,
             ],
             'orm' => [
                 'dql' => [
