@@ -5,9 +5,12 @@ All notable changes to `utafitilabs/postgis-bundle` are documented here.
 ## Contents
 
 - [Unreleased](#unreleased)
+- [v0.2.0](#v020--2026-10-31)
 - [v0.1.0](#v010--2026-09-21)
 
 ## Unreleased
+
+## v0.2.0 — 2026-10-31
 
 ### Added
 
