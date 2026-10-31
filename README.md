@@ -12,6 +12,17 @@ no configuration. Enable the bundle and go.
 
 > Part of the [utafiti tools](https://github.com/utafitilabs).
 
+## Contents
+
+- [Why](#why)
+- [Install](#install)
+- [A taste](#a-taste)
+- [Documentation](#documentation)
+- [Requirements](#requirements)
+- [Contributing](#contributing)
+- [Credits](#credits)
+- [License](#license)
+
 ## Why
 
 Doctrine ships no spatial types, and PostGIS stores every shape as the base `geometry`
