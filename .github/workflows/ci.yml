@@ -7,7 +7,7 @@ name: CI
 # every supported PHP version, every supported major Symfony version.
 on:
   push:
-    branches: [main]
+    branches: [main, "0.1"]
   pull_request:
 
 permissions:

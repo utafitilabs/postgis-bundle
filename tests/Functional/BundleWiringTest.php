@@ -18,6 +18,7 @@ use Doctrine\DBAL\Types\Type;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use UtafitiLabs\PostGISBundle\Platform\PostGISPlatform;
 use UtafitiLabs\PostGISBundle\Schema\PostGISSchemaManager;
+use UtafitiLabs\PostGISBundle\Types\MultiPolygonType;
 
 /**
  * Boots a real Symfony kernel with only FrameworkBundle + DoctrineBundle +
@@ -69,6 +70,27 @@ final class BundleWiringTest extends KernelTestCase
         self::bootKernel(['debug' => false]);
 
         self::assertInstanceOf(PostGISSchemaManager::class, self::connection()->createSchemaManager());
+    }
+
+    /**
+     * A typed geometry column is read back as its sub-type through the kernel's own
+     * type registry. On DBAL 4.6 with doctrine-bundle 3.4 an application's suite
+     * failed here with "Type of the class MultiPolygonType is not registered": the
+     * refinement now names the type instead of handing over an instance.
+     */
+    public function testIntrospectionRefinesATypedGeometryColumnThroughTheKernel(): void
+    {
+        self::bootKernel(['debug' => false]);
+        $connection = self::connection();
+        $connection->executeStatement('DROP TABLE IF EXISTS wiring_typed_geometry');
+        $connection->executeStatement('CREATE TABLE wiring_typed_geometry (id INT PRIMARY KEY, shape geometry(MultiPolygon,4326))');
+
+        try {
+            $columns = $connection->createSchemaManager()->listTableColumns('wiring_typed_geometry');
+            self::assertInstanceOf(MultiPolygonType::class, $columns['shape']->getType());
+        } finally {
+            $connection->executeStatement('DROP TABLE wiring_typed_geometry');
+        }
     }
 
     private static function connection(): Connection

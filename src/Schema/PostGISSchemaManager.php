@@ -51,7 +51,16 @@ final class PostGISSchemaManager extends PostgreSQLSchemaManager
         if (1 === preg_match('/^(?:geometry|geography)\(\s*([A-Za-z]+?)(?:[ZM]{1,2})?\s*,\s*\d+\s*\)$/', $completeType, $m)) {
             $kind = strtolower($m[1]); // multipolygon, point, geometry, ...
             if (Type::hasType($kind)) {
-                $column->setType(Type::getType($kind));
+                // By name where DBAL can (4.6+): a registry that hands types out as
+                // services cannot find a type by its instance, and setType() is
+                // deprecated there. Older DBAL 4 has only setType().
+                // @see https://github.com/doctrine/dbal/pull/7381
+                // @phpstan-ignore function.alreadyNarrowedType (false on DBAL below 4.6, which composer.json allows)
+                if (method_exists($column, 'setTypeName')) {
+                    $column->setTypeName($kind);
+                } else {
+                    $column->setType(Type::getType($kind));
+                }
             }
         }
 
