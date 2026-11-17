@@ -31,7 +31,7 @@
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.2",
         "phpunit/phpunit": "^13.2",
-        "symfony/dependency-injection": "^7.3"
+        "symfony/dependency-injection": "^7.3 || ^8.0"
     },
     "scripts": {
         "cs:fix": "php-cs-fixer fix",

@@ -57,7 +57,6 @@ final class PostGISSchemaManager extends PostgreSQLSchemaManager
                 // services cannot find a type by its instance, and setType() is
                 // deprecated there. Older DBAL 4 has only setType().
                 // @see https://github.com/doctrine/dbal/pull/7381
-                // @phpstan-ignore function.alreadyNarrowedType (false on DBAL below 4.6, which composer.json allows)
                 if (method_exists($column, 'setTypeName')) {
                     $column->setTypeName($kind);
                 } else {

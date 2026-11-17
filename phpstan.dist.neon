@@ -3,3 +3,11 @@ parameters:
     paths:
         - src
         - tests
+    ignoreErrors:
+        # Column::setTypeName() exists from DBAL 4.6 on: against 4.6 the check is
+        # always true, against older DBAL 4 (which composer.json allows) it is the
+        # switch. Unmatched on the old-DBAL job, so it is not reported there.
+        -
+            identifier: function.alreadyNarrowedType
+            path: src/Schema/PostGISSchemaManager.php
+            reportUnmatched: false
